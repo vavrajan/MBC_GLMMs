@@ -69,8 +69,8 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
   int j, k;
   int nrep;
   int cont;
-  int cont_half;
   int print = 0;
+  double stepreduction;
   double u;
   
   //printf("\nnewton_raphson_bi: totnran = %d", *totnran);
@@ -93,11 +93,8 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
   //double var[(*totnran) * ((*totnran) + 1)/2];
   double* prev_max;
   prev_max = (double*)malloc(*totnran * sizeof(double));
-  double* theta_new;
-  theta_new = (double*)malloc(*totnran * sizeof(double));
   //double prev_max[*totnran];
   double loglik_max;
-  double loglik_new;
   
   // save previous max value --> in case we would start not from that point, but rather point "near"
   for(k = 0; k < *totnran; k++){
@@ -109,7 +106,7 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
   nrep = 0;
   
   while(bad_start){
-    
+  
     logpbi_dev(Y, isYna, X,  
                pbeta_num_fix, pbeta_num, ptau_num, 
                pbeta_poi_fix, pbeta_poi, 
@@ -124,7 +121,7 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
                noff, cumnoff, FormulaO,
                ij, i_j, 
                kspec_bi_cat, &print, theta_max, max_value);
-    
+
     if(!isfinite(*max_value)){
       bad_start = 1;
       print = 1;
@@ -138,7 +135,7 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
       //printf("\nnewton_raphson_bi_dev: nrep = %d, i=%d, b[%d] = newtheta:  ", 
       //       nrep, *i, *i);
       for(k=0; k < *totnran; k++){
-        theta_max[k] = rnorm((0.0 + prev_max[k])/(1+nrep),0.5+1/nrep);
+        theta_max[k] = rnorm((0.0 + theta_max[k])/(1+nrep),0.5+1/nrep);
         //printf("%d = %f, ", k, theta_max[k]);
       }
       //fflush(stdout);
@@ -156,7 +153,7 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
       //fflush(stdout);
       
       for(k = 0; k < *totnran; k++){
-        prev_max[k] = theta_max[k] = 0.0;
+        prev_max[k] = 0.0;
       }
       logpbi_dev(Y, isYna, X,  
                  pbeta_num_fix, pbeta_num, ptau_num, 
@@ -172,13 +169,7 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
                  noff, cumnoff, FormulaO,
                  ij, i_j, 
                  kspec_bi_cat, &print, prev_max, &loglik_max);
-      *max_value = loglik_max;
-      if(isfinite(*max_value)){
-        bad_start = 0;
-      }else{
-        bad_start = 1;
-        nrep = 0; /// THIS MAY LEAD TO INFINITE CYCLE, IF NO SUITABLE START EXISTS!
-      }
+      bad_start = 0;
       //break;
     }
   } // end of while
@@ -187,6 +178,7 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
   *converged = 0;
   nrep = 0;
   cont = 1;
+  stepreduction = 1.0;
   
   for(j = 0; ((j < *maxiter) & (!(*converged)) & cont); j++){
     if(print){
@@ -211,15 +203,15 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
                     kspec_bi_cat,
                     theta_max, right_side, var);
     //if(print){
-    //printf("\nnewton_raphson_bi_dev: grad: ");
-    //for(k = 0; k < *totnran; k++){
-    //  printf("%d = %f, ", k, right_side[k]);
-    //}
-    //printf("\nnewton_raphson_bi_dev: hess: ");
-    //for(k = 0; k < *totnran*(*totnran + 1)/2; k++){
-    //  printf("%d = %f, ", k, var[k]);
-    //}
-    //fflush(stdout);
+      //printf("\nnewton_raphson_bi_dev: grad: ");
+      //for(k = 0; k < *totnran; k++){
+      //  printf("%d = %f, ", k, right_side[k]);
+      //}
+      //printf("\nnewton_raphson_bi_dev: hess: ");
+      //for(k = 0; k < *totnran*(*totnran + 1)/2; k++){
+      //  printf("%d = %f, ", k, var[k]);
+      //}
+      //fflush(stdout);
     //}
     
     // Solve for shift using Cholesky decomposition
@@ -227,70 +219,47 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
     backsolve2(chol, almost_shift, totnran, shift);
     //printf("\nnewton_raphson_bi_dev: After solve.\n");
     
-    // New theta - shift added to previous max
+    
+    // Compute the norm of shift
+    norm_shift = 0;
     for(k = 0; k < *totnran; k++){
-      theta_new[k] = theta_max[k] + shift[k];
+      norm_shift += shift[k] * shift[k];
     }
-    
-    // Halving cycle
-    cont_half = 1;
-    while(cont_half){
-      // Compute the norm of shift
-      norm_shift = 0;
-      for(k = 0; k < *totnran; k++){
-        norm_shift += shift[k] * shift[k];
-      }
-      norm_shift = sqrt(norm_shift);
-      
-      // Evaluate new loglik value
-      logpbi_dev(Y, isYna, X,  
-                 pbeta_num_fix, pbeta_num, ptau_num, 
-                 pbeta_poi_fix, pbeta_poi, 
-                 pbeta_bin_fix, pbeta_bin, 
-                 pbeta_ord_fix, pbeta_ord, pc_ord, 
-                 pbeta_cat_fix, pbeta_cat, 
-                 pInvSigma,
-                 N, n, nY, i, Kord, Kcat, 
-                 nfix, cumnfix, FormulaF,
-                 ngrp, cumngrp, FormulaG,
-                 nran, cumnran, totnran, FormulaR,
-                 noff, cumnoff, FormulaO,
-                 ij, i_j,  
-                 kspec_bi_cat, &print, theta_new, &loglik_new);
-      // Compare the likelihoods
-      if((!isfinite(loglik_new)) | (loglik_new < *max_value) ){
-        // We have NOT improved the previous solution
-        // OR we end up with some Inf nonsense
-        // OR the difference in the shift and loglik is already negligible
-        
-        // Try step-halving
-        for(k = 0; k < *totnran; k++){
-          shift[k] = 0.5*shift[k];
-          theta_new[k] = theta_max[k] + shift[k];
-        }
-        
-        if((isfinite(loglik_new) == 1) & (norm_shift + abs(loglik_new - *max_value) < *tolerance)){
-          cont_half = 0;
-        }else{
-          cont_half = 1;
-        }
-        
-      }else{
-        // We have improved the previous solution 
-        for(k = 0; k < *totnran; k++){
-          theta_max[k] = theta_new[k];
-        }
-        *max_value = loglik_new;
-        cont_half = 0;
-        
-      }
-      
-    }
-    
+    norm_shift = sqrt(norm_shift);
+    //printf("newton_raphson_bi: After norm_shift.\n");
     
     // Did we converge?
-    // both differences in thetas and logliks have to be negligible
-    *converged = (norm_shift + abs(loglik_new - *max_value) < *tolerance);
+    *converged = (norm_shift < *tolerance);
+    
+    // Update new value of theta by adding shift to the current one
+    // reduce the size of the step by stepreduction (1/sqrt(nrep))
+    for(k = 0; k < *totnran; k++){
+      theta_max[k] += stepreduction*shift[k];
+    }
+    //if(print){
+      //printf("\nnewton_raphson_bi_dev nrep = %d: theta_max:", nrep);
+      //for(k = 0; k < *totnran; k++){
+      //  printf("%d = %f, ", k, theta_max[k]);
+      //}
+      //fflush(stdout);
+    //}
+    
+    // How about new loglik value
+    logpbi_dev(Y, isYna, X,  
+               pbeta_num_fix, pbeta_num, ptau_num, 
+               pbeta_poi_fix, pbeta_poi, 
+               pbeta_bin_fix, pbeta_bin, 
+               pbeta_ord_fix, pbeta_ord, pc_ord, 
+               pbeta_cat_fix, pbeta_cat, 
+               pInvSigma,
+               N, n, nY, i, Kord, Kcat, 
+               nfix, cumnfix, FormulaF,
+               ngrp, cumngrp, FormulaG,
+               nran, cumnran, totnran, FormulaR,
+               noff, cumnoff, FormulaO,
+               ij, i_j,  
+               kspec_bi_cat, &print, theta_max, max_value);
+    //printf("\nnewton_raphson_bi_dev: isfinite = %d", isfinite(loglik));
     
     if(isfinite(*max_value)){
       print = 0;
@@ -300,18 +269,9 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
         }
         loglik_max = *max_value;
       }
-      if(print){
-        //printf("\nnewton_raphson_bi_dev: prev_max_loglik = %f, max_value = %f, dif = %f", loglik_max, *max_value, loglik_max-*max_value);
-        
-        //printf("\nnewton_raphson_bi_dev: Iteration %d for b[%d] = theta: ", j, *i);
-        //for(k=0; k < *totnran; k++){
-        //  printf("%d = %f, ", k, theta_max[k]);
-        //}
-        //printf("\nnewton_raphson_bi_dev: normshift = %f \n", norm_shift);
-        //fflush(stdout);
-      }
-    }else{
-      // We have some Inf problem going on
+    }
+    
+    if(isfinite(*max_value) == 0){
       print = 1;
       //printf("\n");
       //printf("\nnewton_raphson_bi_dev: i=%d, j=%d, nrep=%dm max_value = %f, b[%d] = theta:  ", 
@@ -339,13 +299,15 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
       printf("\nnewton_raphson_bi_dev: loglik is infinite i = %d, start over! nrep = %d", *i, nrep);
       fflush(stdout);
       j = 0;
-      u = runif(0.0, 1.0)*runif(0.0, 1.0); // closer to zero
       for(k = 0; k < *totnran; k++){
         //theta_max[k] = rnorm((0.0 + nrep*prev_max[k])/(1+nrep),0.5+1/nrep);
         //theta_max[k] = (0.0 + nrep*prev_max[k])/(1+nrep);
+        u = runif(0.0, 1.0)*runif(0.0, 1.0); // closer to zero
         theta_max[k] = u*prev_max[k];
         // seems that lesser variance and closer to 0 is better
       }
+      // also reduce the size of the step by 1/nrep^2
+      stepreduction = 1.0/(nrep*nrep);
       
       logpbi_dev(Y, isYna, X,  
                  pbeta_num_fix, pbeta_num, ptau_num, 
@@ -372,6 +334,17 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
         // 10 seem enough, but rather put there 100
         //break;
         cont = 0;
+      }
+    }else{
+      if(print){
+        //printf("\nnewton_raphson_bi_dev: prev_max_loglik = %f, max_value = %f, dif = %f", loglik_max, *max_value, loglik_max-*max_value);
+        
+        //printf("\nnewton_raphson_bi_dev: Iteration %d for b[%d] = theta: ", j, *i);
+        //for(k=0; k < *totnran; k++){
+        //  printf("%d = %f, ", k, theta_max[k]);
+        //}
+        //printf("\nnewton_raphson_bi_dev: normshift = %f \n", norm_shift);
+        //fflush(stdout);
       }
     }
   }
@@ -432,6 +405,5 @@ void newton_raphson_bi_dev(double* Y,                 // IN [*N]
   free(chol);
   free(var);
   free(prev_max);
-  free(theta_new);
   
 }

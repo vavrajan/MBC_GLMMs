@@ -84,7 +84,6 @@ void newton_raphson(struct str_state* last,   // IN last known values of generat
   int dim_theta;
   int nrep;
   int retchol;
-  int cont_half;
   
   if(*is_cat == 2){
     dim_theta = *totnfix; // we are working with random effects, actually totnran
@@ -116,10 +115,8 @@ void newton_raphson(struct str_state* last,   // IN last known values of generat
   //double hess[(dim_theta) * ((dim_theta) + 1)/2];
   double* prev_max;
   prev_max = (double*)malloc(dim_theta * sizeof(double));
-  double* theta_new;
-  theta_new = (double*)malloc(dim_theta * sizeof(double));
   //double prev_max[dim_theta];
-  double loglik_max, loglik, loglik_new, u;
+  double loglik_max, loglik;
   
   for(k = 0; k < dim_theta; k++){
     prev_max[k] = theta_max[k] = theta_0[k];
@@ -218,59 +215,35 @@ void newton_raphson(struct str_state* last,   // IN last known values of generat
       backsolve2(chol, almost_shift, &dim_theta, shift);
       //printf("\nnewton_raphson: After solve.\n");
       
-      // New theta - shift added to previous max
+      // Compute the norm of shift
+      norm_shift = 0.0;
       for(k = 0; k < dim_theta; k++){
-        theta_new[k] = theta_max[k] + shift[k];
+        norm_shift += shift[k] * shift[k];
       }
-      
-      // Halving cycle
-      cont_half = 1;
-      while(cont_half){
-        // Compute the norm of shift
-        norm_shift = 0.0;
-        for(k = 0; k < dim_theta; k++){
-          norm_shift += shift[k] * shift[k];
-        }
-        norm_shift = sqrt(norm_shift);
-        
-        // Evaluate new loglik value
-        (*fun)(last, hyperparameter, Y, X, spec, dims, 
-         predictor_num, predictor_poi, predictor_bin, predictor_ord, predictor_cat, pred_skip,
-         N, n, g, Kord, Kcat, kspec_bi_cat, 
-         nfix, cumnfix, totnfix, FormulaF, n_i, i_j, nUg, listUi, 
-         theta_new, &loglik_new);
-        // Compare the likelihoods
-        if((!isfinite(loglik_new)) | (loglik_new < loglik_max) ){
-          // We have NOT improved the previous solution
-          // OR we end up with some Inf nonsense
-          // OR the difference in the shift and loglik is already negligible
-          
-          // Try step-halving
-          for(k = 0; k < dim_theta; k++){
-            shift[k] = 0.5*shift[k];
-            theta_new[k] = theta_max[k] + shift[k];
-          }
-          
-          if((isfinite(loglik_new)) & (norm_shift + abs(loglik_new - loglik_max) < *((*tuning).tolerance))){
-            cont_half = 0;
-          }else{
-            cont_half = 1;
-          }
-          
-        }else{
-          // We have improved the previous solution 
-          for(k = 0; k < dim_theta; k++){
-            theta_max[k] = theta_new[k];
-          }
-          loglik = loglik_new;
-          cont_half = 0;
-          
-        }
-        
-      }
+      norm_shift = sqrt(norm_shift);
+      //printf("newton_raphson: After norm_shift.\n");
       
       // Did we converge?
-      *converged = (norm_shift + abs(loglik_new - loglik_max) < *((*tuning).tolerance));
+      *converged = (norm_shift < *((*tuning).tolerance));
+      
+      // Update new value of theta by adding shift to the current one
+      for(k = 0; k < dim_theta; k++){
+        theta_max[k] += shift[k];
+      }
+      //printf("\nnewton_raphson: theta_max:");
+      //for(k = 0; k < dim_theta; k++){
+      //  printf("%d = %f", k, theta_max[k]);
+      //}
+      fflush(stdout);
+      
+      // How about new loglik value
+      (*fun)(last, hyperparameter, Y, X, spec, dims, 
+       predictor_num, predictor_poi, predictor_bin, predictor_ord, predictor_cat, pred_skip,
+       N, n, g, Kord, Kcat, kspec_bi_cat, 
+       nfix, cumnfix, totnfix, FormulaF, n_i, i_j, nUg, listUi, 
+       theta_max, &loglik);
+      
+      //printf("\nnewton_raphson: prev_loglik = %f, loglik = %f, dif = %f", *max_value, loglik, loglik-*max_value);
       
       if(loglik > loglik_max){
         for(k = 0; k < dim_theta; k++){
@@ -281,18 +254,16 @@ void newton_raphson(struct str_state* last,   // IN last known values of generat
       
       *max_value = loglik;
       
-      if(!isfinite(*max_value)){
+      if(isfinite(*max_value) == 0){
         //failed = 1;
         nrep++;
         // it came to a nonsense --> start all again from different value
         //printf("\nnewton_raphson: loglik for [g=%d] is infinite start over!", *g);
         //fflush(stdout);
         j = 0; // start over
-        u = runif(0.0, 1.0)*runif(0.0, 1.0); // closer to zero
         for(k = 0; k < dim_theta; k++){
-          // theta_max[k] = rnorm((0.0 + nrep*prev_max[k])/(1+nrep),0.5+1/nrep);
+          theta_max[k] = rnorm((0.0 + nrep*prev_max[k])/(1+nrep),0.5+1/nrep);
           // seems that lesser variance and closer to previous maximal solution is better
-          theta_max[k] = u*prev_max[k];
         }
         //printf("\nnewton_raphson: new theta_max for g = %d: ", *g);
         //for(k=0; k < dim_theta; k++){
@@ -348,19 +319,19 @@ void newton_raphson(struct str_state* last,   // IN last known values of generat
     *iter = *((*tuning).maxiter);
     *converged = 0;
     // evaluate using the so far best solution prev_max
-    for(k = 0; k < dim_theta; k++){
-      theta_max[k] = prev_max[k];
-    }
-    *max_value = loglik_max;
-    // or use point 0
     //for(k = 0; k < dim_theta; k++){
-    //  theta_max[k] = 0.0;
+    //  theta_max[k] = prev_max[k];
     //}
-    //(*fun)(last, hyperparameter, Y, X, spec, dims, 
-    // predictor_num, predictor_poi, predictor_bin, predictor_ord, predictor_cat, pred_skip,
-    // N, n, g, Kord, Kcat, kspec_bi_cat, 
-    // nfix, cumnfix, totnfix, FormulaF, n_i, i_j, nUg, listUi, 
-    // theta_max, max_value);
+    //*max_value = loglik_max;
+    // or use point 0
+    for(k = 0; k < dim_theta; k++){
+      theta_max[k] = 0.0;
+    }
+    (*fun)(last, hyperparameter, Y, X, spec, dims, 
+     predictor_num, predictor_poi, predictor_bin, predictor_ord, predictor_cat, pred_skip,
+     N, n, g, Kord, Kcat, kspec_bi_cat, 
+     nfix, cumnfix, totnfix, FormulaF, n_i, i_j, nUg, listUi, 
+     theta_max, max_value);
   }
   // Update the hess matrix to be at theta_max
   (*d_d2_fun)(last, hyperparameter, Y, X, spec, dims, 
@@ -393,6 +364,5 @@ void newton_raphson(struct str_state* last,   // IN last known values of generat
   free(chol);
   free(hess);
   free(prev_max);
-  free(theta_new);
   
 }

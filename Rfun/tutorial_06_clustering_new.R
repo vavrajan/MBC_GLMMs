@@ -18,6 +18,7 @@ library("mvtnorm")
 library("gaussquad")
 library("polynom")
 library("orthopolynom")
+library("colorspace")
 
 ### Source implemented R functions
 source(paste0(RROOT, "GenerateData.R"))
@@ -27,6 +28,7 @@ source(paste0(RROOT, "FromListtoC.R"))
 source(paste0(RROOT, "FromCtoMatrix.R"))
 source(paste0(RROOT, "FromMatrixtoC.R"))
 source(paste0(RROOT, "FromListtoMatrix.R"))
+source(paste0(RROOT, "plotting_functions.R"))
 
 ### Source implemented C functions
 dyn.load(paste0(CROOT, "pUig_dev.dll"))
@@ -101,15 +103,15 @@ Ynew
 ### Serial code:
 
 system.time(
-  probs <- pUig_dev(mcmc, Ynew[1:8,], Xnew[1:8,], Id,
+  probs <- pUig_dev(mcmc, Ynew, Xnew, Id,
                     dynamic_prob = F, # should the probabilities be calculated dynamically
                     start = 1,
                     end = 10000,
                     thin = 1000,
-                    ChainsToUse = 4,
+                    ChainsToUse = 1:4,
                     tolerance = 1e-7, # tolerance when computing norm of the shift within Newton-Raphson
-                    maxiter = 25, # maximum iterations allowed during Newton-Raphson update of proposal distribution
-                    maxnrep = 1, # maximum number of repetitions when N-R fails
+                    maxiter = 100, # maximum iterations allowed during Newton-Raphson update of proposal distribution
+                    maxnrep = 20, # maximum number of repetitions when N-R fails
                     NGQ = 1 # number of points for Adaptive Gaussian Quadrature
                     # default value 1 corresponds to Laplacian approximation
                     # do not use values higher than 7, since there are NGQ^totnran summands
@@ -123,8 +125,8 @@ pUigChainsParallel <- function(chain = 1,
                                dynamic_prob = F,
                                start = mcmc$B+1, end = mcmc$M, thin = 1,
                                tolerance = 1e-7,
-                               maxiter = 25,
-                               maxnrep = 10,
+                               maxiter = 100,
+                               maxnrep = 20,
                                NGQ = 1,
                                RROOT = RROOT, CROOT = CROOT){
   
@@ -177,11 +179,11 @@ sampletime <-
                        mcmc = mcmc,
                        Ynew = Ynew, Xnew = Xnew, Id = Id,
                        dynamic_prob = F,
-                       start = 1, end = 10000, thin = 1000,
+                       start = 1, end = 10000, thin = 1,
                        tolerance = 1e-7,
-                       maxiter = 25,
-                       maxnrep = 10,
-                       NGQ = 1,
+                       maxiter = 100,
+                       maxnrep = 20,
+                       NGQ = 2,
                        RROOT = RROOT, CROOT = CROOT)
   )
 # Ending cluster
@@ -202,10 +204,66 @@ save(probs, file = paste0(RDATA, "tutorial_probs.RData"))
 
 colnames(probs)
 
+### Traceplots using implemented functions
+pmcmc <- list()
+pmcmc$all <- probs
+pmcmc$all$logdev <- log(pmcmc$all$deviance)
+pmcmc$howsave <- "matrix"
+pmcmc$B = mcmc$B
+pmcmc$M = mcmc$M
+pmcmc$BM = mcmc$BM
+pmcmc$Nchains = mcmc$Nchains
+pmcmc$spec = mcmc$spec
+pmcmc$settings = mcmc$settings
+pmcmc$Nums = mcmc$Nums
+pmcmc$Pois = mcmc$Pois
+pmcmc$Bins = mcmc$Bins
+pmcmc$Ords = mcmc$Ords
+pmcmc$Cats = mcmc$Cats
+
+figthin = max(round(M/1000), 1)
+figthin = 1
+chtplt = 1:mcmc$Nchains
+
+## Deviance
+cairo_pdf(paste0(FIG, "traceplots_deviance", trial, "_Gmax_", Gmax, "_nch_", Nchains, "_M_", M, "_B_", B, ".pdf"),
+          width = 6, height = 5)
+{
+  par(mfrow = c(1,1), mar = c(4,4,1,1))
+  plot.traceplots(mcmc = pmcmc, thin = figthin, B = 0, #M = 5,
+                  what = "deviance", labcex = 1,
+                  whatLAB = "Deviance", ChainsToPlot = chtplt)
+}
+dev.off()
+
+## Log-deviance
+cairo_pdf(paste0(FIG, "traceplots_logdev", trial, "_Gmax_", Gmax, "_nch_", Nchains, "_M_", M, "_B_", B, ".pdf"),
+          width = 6, height = 5)
+{
+  par(mfrow = c(1,1), mar = c(4,4,1,1))
+  plot.traceplots(mcmc = pmcmc, thin = figthin, B = 0, #M = 5,
+                  what = "logdev", labcex = 1,
+                  whatLAB = "log-deviance", ChainsToPlot = chtplt)
+}
+dev.off()
+
+## Individual contirubitons to deviance
+cairo_pdf(paste0(FIG, "traceplots_dev_i", trial, "_Gmax_", Gmax, "_nch_", Nchains, "_M_", M, "_B_", B, ".pdf"),
+          width = 6, height = 5)
+{
+  par(mfrow = c(5,4), mar = c(4,4,1,1))
+  for(i in 1:nnew){
+    plot.traceplots(mcmc = pmcmc, thin = figthin, B = 0, #M = 5,
+                    what = "dev_i", dimspec = i, labcex = 1, 
+                    whatLAB = paste0("Dev[",i,"]"), ChainsToPlot = chtplt)
+  }
+}
+dev.off()
+
 ### Traceplots
 par(mfrow = c(1,2))
-plot(probs$deviance, type = "l")
-hist(probs$deviance)
+plot(log(probs$deviance), type = "l")
+hist(log(probs$deviance))
 par(mfrow = c(2,5))
 for(i in 1:nnew){
   plot(probs[,paste0("dev_i[",i,"]")], type = "l",

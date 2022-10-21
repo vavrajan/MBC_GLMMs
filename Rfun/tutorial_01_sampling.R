@@ -509,13 +509,13 @@ Nchains = 4    # number of chains to be sampled
 
 # ## To do it in serial - chain by chain - simply use the following command
 # ## benefit: you can see the percent progress bar + potential errors or problems
-# mcmc <- Metropolis_within_Gibbs_MBC_NumPoiBinOrdCat(Y = Y, X = X, G = Gmax,
-#                                             spec = spec, whatsave = whatsave,
-#                                             Nums = Nums, Pois = Pois, Bins = Bins, Ords = Ords, Cats = Cats, 
-#                                             Id = Id, Formula = Formula, 
-#                                             param = param, howsave = howsave,
-#                                             tuning = tuning,
-#                                             M = M, B = B, Nchains = Nchains)
+mcmc <- Metropolis_within_Gibbs_MBC_NumPoiBinOrdCat(Y = Y, X = X, G = Gmax,
+                                            spec = spec, whatsave = whatsave,
+                                            Nums = Nums, Pois = Pois, Bins = Bins, Ords = Ords, Cats = Cats,
+                                            Id = Id, Formula = Formula,
+                                            param = param, howsave = howsave,
+                                            tuning = tuning,
+                                            M = M, B = B, Nchains = Nchains)
 
 
 ## In parallel
