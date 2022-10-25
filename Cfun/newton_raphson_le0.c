@@ -29,12 +29,14 @@ void newton_raphson_le0(struct str_state* last,    // OUT+IN last known values o
   
   // Auxiliary parameters
   int j;
+  int cont;
   double loglik;
   
   double le0 = log(*((*last).e0));
   double grad = 0.0;
   double shift = 0.0;
   double norm_shift = 0.0;
+  double le0_new;
   
   logple0(last, param, 
           G, Gplus, n, nUg,
@@ -47,35 +49,54 @@ void newton_raphson_le0(struct str_state* last,    // OUT+IN last known values o
   for(j = 0; ((j < *((*tuning).maxiter)) & (!(*converged))); j++){
     //printf("newton_raphson_le0: j = %d \n", j);
     //fflush(stdout);
-    
     // First compute the first and second derivative
     d_d2_logple0(last, param, 
                  G, Gplus, n, nUg,
                  &le0, &grad, proposal_prec);
-    //printf("\nnewton_raphson_le0: first = %f, second = %f", grad, *proposal_prec);
-    //fflush(stdout);
-    
     // Compute the shift
     shift = grad/(*proposal_prec);
     
+    
+    le0_new = le0 + shift;
+    
+    cont = 1;
+    while(cont){
+      // loglik
+      logple0(last, param, 
+              G, Gplus, n, nUg,
+              &le0_new, &loglik);
+      
+      // Compare the likelihoods
+      if((!isfinite(loglik)) | (loglik < *max_value) ){
+        // We have NOT improved the previous solution
+        // OR we end up with some Inf nonsense
+        // OR the difference in the shift and loglik is already negligible
+        
+        // Try step-halving
+        shift = 0.5*shift;
+        le0_new = le0 + shift;
+        
+        if((isfinite(loglik)) & (abs(shift) + abs(loglik - *max_value) < *((*tuning).tolerance))){
+          cont = 0;
+        }else{
+          cont = 1;
+        }
+        
+      }else{
+        // We have improved the previous solution 
+        le0 = le0_new;
+        *max_value = loglik;
+        cont = 0;
+        
+      }
+      
+    }
+    
     // Did we converge?
-    norm_shift = ((shift > 0) ? shift : -shift);
-    *converged = ( norm_shift < *((*tuning).tolerance));
+    norm_shift = abs(shift);
+    *converged = ( norm_shift + abs(loglik - *max_value) < *((*tuning).tolerance));
     //printf("\nnewton_raphson_e0: normshift = %f", norm_shift);
     //fflush(stdout);
-    
-    // Update new value of theta by adding shift to the current one
-    le0 += shift;
-    //printf("\nnewton_raphson_e0: le0 = %f", le0);
-    //fflush(stdout);
-    
-    // How about new loglik value
-    logple0(last, param, 
-            G, Gplus, n, nUg,
-            &le0, &loglik);
-    //printf("\nnewton_raphson_e0: prev_loglik = %f, loglik = %f, dif = %f", *max_value, loglik, loglik-*max_value);
-    //fflush(stdout);
-    *max_value = loglik;
     
   }
   

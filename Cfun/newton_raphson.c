@@ -180,8 +180,10 @@ void newton_raphson(struct str_state* last,   // IN last known values of generat
       //  printf("%d = %f, ", k, theta_max[k]);
       //}
       //fflush(stdout);
+      u = runif(0.0, 1.0)*runif(0.0, 1.0);
       for(k = 0; k < dim_theta; k++){
-        theta_max[k] = rnorm((0.0 + nrep*prev_max[k])/(1+nrep),0.5+1/nrep);
+        theta_max[k] = u * prev_max[k];
+        //theta_max[k] = rnorm((0.0 + nrep*prev_max[k])/(1+nrep),0.5+1/nrep);
         // seems that lesser variance and closer to previous maximal solution is better
       }
       //printf("\nnewton_raphson: new theta_max for g = %d: ", *g);
@@ -270,7 +272,7 @@ void newton_raphson(struct str_state* last,   // IN last known values of generat
       }
       
       // Did we converge?
-      *converged = (norm_shift + abs(loglik_new - loglik_max) < *((*tuning).tolerance));
+      *converged = (norm_shift + abs(loglik - loglik_max) < *((*tuning).tolerance));
       
       if(loglik > loglik_max){
         for(k = 0; k < dim_theta; k++){

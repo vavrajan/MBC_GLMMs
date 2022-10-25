@@ -334,11 +334,21 @@ void d_d2_logpapi_ord(struct str_state* last,  // IN last known values of genera
       
       // case l1 < l2
       for(l2 = l1+1; l2 <*Kord; l2++){
-        if( (l1 <= k) & (k < l2) ){
-          d2cd2a[d2coord + l1 + l2*(l2+1)/2] = 0.0;
+        if(l1 <= k){
+          if(l2 <= k){
+            d2cd2a[d2coord + l1 + l2*(l2+1)/2] = - dcda[dcoord + l1] * dcda[dcoord + l2];
+          }else{
+            d2cd2a[d2coord + l1 + l2*(l2+1)/2] = 0.0;
+          }
         }else{
-          d2cd2a[d2coord + l1 + l2*(l2+1)/2] = - dcda[dcoord + l1] * dcda[dcoord + l2];
+          d2cd2a[d2coord + l1 + l2*(l2+1)/2] = dcda[dcoord + l1] * dcda[dcoord + l2];
         }
+        
+        //if( (l1 <= k) & (k < l2) ){
+        //  d2cd2a[d2coord + l1 + l2*(l2+1)/2] = 0.0;
+        //}else{
+        //  d2cd2a[d2coord + l1 + l2*(l2+1)/2] = - dcda[dcoord + l1] * dcda[dcoord + l2];
+        //}
       }
     }
     
@@ -476,7 +486,7 @@ void d_d2_logpapi_ord(struct str_state* last,  // IN last known values of genera
     // gradient
     //value[l1] += api_prior[l1];
     grad[l1] += *api_prior;
-    grad[l1] -= sum_api_prior * ea[l1] / pcum;
+    grad[l1] -= sum_api_prior * ea_pcum[l1];
     
     // Hess diagonal
     k = l1*(l1+3)/2;
