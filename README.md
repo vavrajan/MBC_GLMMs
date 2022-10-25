@@ -17,4 +17,4 @@ Subdirectories:
 Run "tutorial_0....R" in "Rfun" directory to know how to use the method.
 But first you may need to compile the C function using "compile_....R" functions.
 
-Warning: Tutorial 06 demonstrates the use of Adaptive Gaussian Quadratures for approsimation of intergrals. However, there still remain issues regarding convergence of the Newton-Raphson method, which may lead to invalid results. We are currenly working on the solution. 
+
